@@ -14,4 +14,6 @@
 #include<stdlib.h>
 #include<string.h>
 #include<assert.h>
+#include<math.h>
+#include<errno.h>
 #endif //PCH_H

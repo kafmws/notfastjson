@@ -10,9 +10,11 @@ enum {
     NFJSON_PARSE_EXPECT_VALUE,
     NFJSON_PARSE_INVALID_VALUE,
     NFJSON_PARSE_ROOT_NOT_SINGULAR,
+    NFJSON_PARSE_NUMBER_TOO_BIG,
 };
 
 typedef struct {
+    double n;/* type == JSON_NUMBER */
     nfjson_type type;
 }nfjson_value;
 
@@ -23,3 +25,5 @@ typedef struct {
 int nfjson_parse(nfjson_value *val, const char *json);
 
 nfjson_type nfjson_get_type(const nfjson_value *val);
+
+double nfjson_get_number(const nfjson_value * val);
