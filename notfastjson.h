@@ -1,3 +1,4 @@
+#pragma once
 #include"pch.h"
 
 typedef enum {
@@ -11,19 +12,22 @@ enum {
     NFJSON_PARSE_INVALID_VALUE,
     NFJSON_PARSE_ROOT_NOT_SINGULAR,
     NFJSON_PARSE_NUMBER_TOO_BIG,
+    NFJSON_PARSE_MISS_QUOTATION_MARK,
+    NFJSON_PARSE_INVALID_STRING_ESCAPE,
+    NFJSON_PARSE_INVALID_STRING_CHAR,
 };
 
 typedef struct {
-    double n;/* type == JSON_NUMBER */
+    union {
+        struct { char *s; size_t len; }s;/* type == JSON_STRING */
+        double n;/* type == JSON_NUMBER */
+    }u;
     nfjson_type type;
-}nfjson_value;
+}nfjson_value;/* may using C11 grammar like v->s for  v->u.s.s */
 
 typedef struct {
     const char *json;/*the parsing position in the json*/
+    char *stack;/*parsing buffer*/
+    size_t size;/*size of stack*/
+    size_t top;/*pointer of stack*/
 }nfjson_context;
-
-int nfjson_parse(nfjson_value *val, const char *json);
-
-nfjson_type nfjson_get_type(const nfjson_value *val);
-
-double nfjson_get_number(const nfjson_value * val);
