@@ -19,6 +19,8 @@ static void *nfjson_context_push(nfjson_context *c, size_t size) {
     return re;
 }
 
+#define PUSHC(c, ch) do{ *(char *)(nfjson_context_push(c, sizeof(char))) = (ch); }while(0)
+
 static void *nfjson_context_pop(nfjson_context *c, size_t size) {
     assert(c->top >= size);
     return c->stack + (c->top -= size);
@@ -81,6 +83,7 @@ static int nfjson_parse_literal(nfjson_context *c, nfjson_value *val, const char
 
 #define ISDIGIT(ch)         ((ch) >= '0' && (ch) <= '9')
 #define ISDIGIT1TO9(ch)     ((ch) >= '1' && (ch) <= '9')
+#define ISHEXCHAR(ch)       ISDIGIT((ch))||((ch)>='A'&&(ch)<='F')||((ch)>='a'&&(ch)<='f')
 /**
 *   number = ["-"] int[frac][exp]
 *   int = "0" / digit1 - 9 * digit
@@ -138,7 +141,74 @@ out:
     return parse_type > 0 ? parse_type : NFJSON_PARSE_OK;
 }
 
-#define PUSHC(c, ch) do{ *(char *)(nfjson_context_push(c, sizeof(char))) = (ch); }while(0)
+static char *nfjson_unicode_char2dec(const char *str, unsigned int *val) {
+    int i = 0;
+    char ch;
+    unsigned int u = 0;
+    do {
+        ch = *str++;
+        u = u << 4;
+        if (ISDIGIT(ch)) { u |= (ch - '0') & 0xFFFF; }
+        else if (ch >= 'a'&&ch <= 'f') { u |= (ch - 87) & 0xFFFF; }
+        else if (ch >= 'A'&&ch <= 'F') { u |= (ch - 55) & 0xFFFF; }
+        else return NULL;
+        i++;
+    } while (i < 4);
+    *val = u;
+    return (char *)str;
+}
+
+/* codepoint = 0x10000 + (H - 0xD800) × 0x400 + (L - 0xDC00) */
+static int nfjson_parse_unicode_char(char const **str, unsigned int *val) {
+    unsigned int H = 0, L = 0;
+    char *p = *str;
+    p = nfjson_unicode_char2dec(p, &H);
+    if (!p) return NFJSON_PARSE_INVALID_UNICODE_HEX;
+    if (0xD800 <= H && H <= 0xDBFF) {
+        if(!(p[0] == '\\' && p[1] =='u'))
+            return NFJSON_PARSE_INVALID_UNICODE_SURROGATE;
+        p += 2;
+        p = nfjson_unicode_char2dec(p, &L);
+        if (!p || !(0xDC00 <= L && L <= 0xDFFF))
+            return NFJSON_PARSE_INVALID_UNICODE_SURROGATE;
+        *val = 0x10000 + (H - 0xD800) * 0x400 + (L - 0xDC00);
+    }
+    else *val = H;
+    *str = p;
+    return NFJSON_PARSE_OK;
+}
+
+/* push codepoint into stack in UTF-8 */
+static int nfjson_encode_unicode_codepoint(nfjson_context *c, unsigned int cp) {
+    assert(cp >= 0x0 && cp <= 0x10FFFF);
+    if (cp < 0x0080) {
+        PUSHC(c, (char)cp);
+        return 1;
+    }
+    else if (cp < 0x0800) {
+        //0x3F  0011 1111  →  00xx xxxx
+        //0x80  1000 0000  → 10xx xxxx
+        //0xC0  1100 0000  → 110x xxxx
+        PUSHC(c, (cp<<6) | 0xC0);
+        PUSHC(c, cp & 0x3F | 0x80);
+        return 2;
+    }
+    else if (cp < 0x10000) {
+        PUSHC(c, (cp << 12) | 0xE0);
+        PUSHC(c, (cp << 6) & 0x3F | 0x80);
+        PUSHC(c, cp & 0x3F | 0x80);
+        return 3;
+    }
+    else if (cp < 0x10FFFF) {
+        PUSHC(c, (cp << 18) | 0xF0);
+        PUSHC(c, (cp << 12) & 0x3F | 0x80);
+        PUSHC(c, (cp << 6) & 0x3F | 0x80);
+        PUSHC(c, cp & 0x3F | 0x80);
+        return 4;
+    }
+    else return 0;
+}
+
 /**
 *   string = quotation-mark *char quotation-mark
 *   char = unescaped /
@@ -159,7 +229,8 @@ out:
 static int nfjson_parse_string(nfjson_context *c, nfjson_value *val) {
     size_t len;
     size_t begin = c->top;
-    int ch;
+    int ch, parse_status;
+    unsigned int u;
     const char *str = c->json + 1;
     while (1) {
         switch (ch = *str++){
@@ -178,7 +249,11 @@ static int nfjson_parse_string(nfjson_context *c, nfjson_value *val) {
             case 'n':PUSHC(c, '\n'); break;
             case 'r':PUSHC(c, '\r'); break;
             case 't':PUSHC(c, '\t'); break;
-            case 'u'://PUSHC(c, '\u'); break;
+            case 'u':
+                parse_status = nfjson_parse_unicode_char(&str, &u);
+                if (parse_status == NFJSON_PARSE_OK) nfjson_encode_unicode_codepoint(c, u);
+                else return parse_status;
+                break;
             default: c->json = str; return NFJSON_PARSE_INVALID_STRING_ESCAPE;
             }break;
         case '\0':c->top = begin; return NFJSON_PARSE_MISS_QUOTATION_MARK;

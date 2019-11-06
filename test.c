@@ -209,6 +209,29 @@ static void test_access_number() {
     nfjson_free(&val);
 }
 
+static void test_parse_invalid_unicode_hex() {
+    TEST_ERROR(NFJSON_PARSE_INVALID_UNICODE_HEX, "\"\\u\"");
+    TEST_ERROR(NFJSON_PARSE_INVALID_UNICODE_HEX, "\"\\u0\"");
+    TEST_ERROR(NFJSON_PARSE_INVALID_UNICODE_HEX, "\"\\u01\"");
+    TEST_ERROR(NFJSON_PARSE_INVALID_UNICODE_HEX, "\"\\u012\"");
+    TEST_ERROR(NFJSON_PARSE_INVALID_UNICODE_HEX, "\"\\u/000\"");
+    TEST_ERROR(NFJSON_PARSE_INVALID_UNICODE_HEX, "\"\\uG000\"");
+    TEST_ERROR(NFJSON_PARSE_INVALID_UNICODE_HEX, "\"\\u0/00\"");
+    TEST_ERROR(NFJSON_PARSE_INVALID_UNICODE_HEX, "\"\\u0G00\"");
+    TEST_ERROR(NFJSON_PARSE_INVALID_UNICODE_HEX, "\"\\u00/0\"");
+    TEST_ERROR(NFJSON_PARSE_INVALID_UNICODE_HEX, "\"\\u00G0\"");
+    TEST_ERROR(NFJSON_PARSE_INVALID_UNICODE_HEX, "\"\\u000/\"");
+    TEST_ERROR(NFJSON_PARSE_INVALID_UNICODE_HEX, "\"\\u000G\"");
+}
+
+static void test_parse_invalid_unicode_surrogate() {
+    TEST_ERROR(NFJSON_PARSE_INVALID_UNICODE_SURROGATE, "\"\\uD800\"");
+    TEST_ERROR(NFJSON_PARSE_INVALID_UNICODE_SURROGATE, "\"\\uDBFF\"");
+    TEST_ERROR(NFJSON_PARSE_INVALID_UNICODE_SURROGATE, "\"\\uD800\\\\\"");
+    TEST_ERROR(NFJSON_PARSE_INVALID_UNICODE_SURROGATE, "\"\\uD800\\uDBFF\"");
+    TEST_ERROR(NFJSON_PARSE_INVALID_UNICODE_SURROGATE, "\"\\uD800\\uE000\"");
+}
+
 static void test_parse() {
     #if 0
     test_parse_null();
@@ -228,6 +251,8 @@ static void test_parse() {
     test_access_null();
     test_access_boolean();
     test_access_number();
+    test_parse_invalid_unicode_hex();
+    test_parse_invalid_unicode_surrogate();
 }
 
 int main() {
