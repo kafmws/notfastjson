@@ -17,16 +17,20 @@ enum {
     NFJSON_PARSE_INVALID_STRING_CHAR,
     NFJSON_PARSE_INVALID_UNICODE_HEX,
     NFJSON_PARSE_INVALID_UNICODE_SURROGATE,
+    NFJSON_EXTRA_COMMA,
 
 };
 
-typedef struct {
+typedef struct nfjson_value nfjson_value;
+
+struct nfjson_value {
     union {
         struct { char *s; size_t len; }s;/* type == JSON_STRING */
+        struct { nfjson_value *e; size_t len; }a;/* type == JSON_ARRAY */
         double n;/* type == JSON_NUMBER */
     }u;
     nfjson_type type;
-}nfjson_value;/* may using C11 grammar like v->s for  v->u.s.s */
+};/* may using C11 grammar like v->s for  v->u.s.s */
 
 typedef struct {
     const char *json;/*the parsing position in the json*/

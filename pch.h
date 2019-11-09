@@ -10,6 +10,8 @@
 #define PCH_H
 
 // TODO: 添加要在此处预编译的标头
+#define _CRTDBG_MAP_ALLOC
+#include <crtdbg.h>
 #include<stdio.h>
 #include<stdlib.h>
 #include<string.h>

@@ -103,7 +103,9 @@ static int nfjson_parse_number(nfjson_context *c, nfjson_value *val) {
                 if (!(ISDIGIT(*test)))return NFJSON_PARSE_INVALID_VALUE;//0.
                 while (ISDIGIT(*test))test++;
             }
-            else if (*test != 'e'&& *test != 'E' && *test != '\0') { parse_type = NFJSON_PARSE_ROOT_NOT_SINGULAR; goto out; }//parse mostly valid text
+            else if (*test != 'e'&& *test != 'E' && *test != '\0' && *test != ' ' && *test != ',') {// ' ' & ',' for array
+                parse_type = NFJSON_PARSE_ROOT_NOT_SINGULAR; goto out; 
+            }//parse mostly valid text
         }
         else {
             while (ISDIGIT(*test)) test++;
@@ -116,7 +118,7 @@ static int nfjson_parse_number(nfjson_context *c, nfjson_value *val) {
         if (*test == 'e' || *test == 'E') {
             test++;
             if (*test == '+' || *test == '-')test++;
-            if (!(ISDIGIT(*test))) { parse_type = NFJSON_PARSE_ROOT_NOT_SINGULAR; goto out; }
+            if (!(ISDIGIT(*test)) && *test != ' ' && *test != ',') { parse_type = NFJSON_PARSE_ROOT_NOT_SINGULAR; goto out; }
             while (ISDIGIT(*test))test++;
         }
     } else return NFJSON_PARSE_INVALID_VALUE;
@@ -189,20 +191,20 @@ static int nfjson_encode_unicode_codepoint(nfjson_context *c, unsigned int cp) {
         //0x3F  0011 1111  →  00xx xxxx
         //0x80  1000 0000  → 10xx xxxx
         //0xC0  1100 0000  → 110x xxxx
-        PUSHC(c, (cp<<6) | 0xC0);
+        PUSHC(c, (cp >> 6) | 0xC0);
         PUSHC(c, cp & 0x3F | 0x80);
         return 2;
     }
     else if (cp < 0x10000) {
-        PUSHC(c, (cp << 12) | 0xE0);
-        PUSHC(c, (cp << 6) & 0x3F | 0x80);
+        PUSHC(c, (cp >> 12) | 0xE0);
+        PUSHC(c, (cp >> 6) & 0x3F | 0x80);
         PUSHC(c, cp & 0x3F | 0x80);
         return 3;
     }
-    else if (cp < 0x10FFFF) {
-        PUSHC(c, (cp << 18) | 0xF0);
-        PUSHC(c, (cp << 12) & 0x3F | 0x80);
-        PUSHC(c, (cp << 6) & 0x3F | 0x80);
+    else if (cp <= 0x10FFFF) {
+        PUSHC(c, (cp >> 18) | 0xF0);
+        PUSHC(c, (cp >> 12) & 0x3F | 0x80);
+        PUSHC(c, (cp >> 6) & 0x3F | 0x80);
         PUSHC(c, cp & 0x3F | 0x80);
         return 4;
     }
@@ -254,7 +256,7 @@ static int nfjson_parse_string(nfjson_context *c, nfjson_value *val) {
                 if (parse_status == NFJSON_PARSE_OK) nfjson_encode_unicode_codepoint(c, u);
                 else return parse_status;
                 break;
-            default: c->json = str; return NFJSON_PARSE_INVALID_STRING_ESCAPE;
+            default: c->top = begin; c->json = str; return NFJSON_PARSE_INVALID_STRING_ESCAPE;
             }break;
         case '\0':c->top = begin; return NFJSON_PARSE_MISS_QUOTATION_MARK;
         default:
@@ -263,6 +265,51 @@ static int nfjson_parse_string(nfjson_context *c, nfjson_value *val) {
             break;
         }
     }
+}
+
+static int nfjson_parse_value();
+
+/* array = %x5B ws [ value *( ws %x2C ws value ) ] ws %x5D */
+static int nfjson_parse_array(nfjson_context *c, nfjson_value *val) {
+    c->json++;
+    nfjson_parse_whitespace(c);
+    size_t len = 0;
+    while (*c->json != ']') {
+        nfjson_value *v = (nfjson_value *)malloc(sizeof(nfjson_value));
+        int parse_status = nfjson_parse_value(c, v);
+        if (parse_status == NFJSON_PARSE_OK) {
+            *(uintptr_t *)nfjson_context_push(c, sizeof(uintptr_t)) = (uintptr_t)v;
+            len++;
+        }
+        else {
+            for (; len >= 0; len--) free((nfjson_value *)(*(uintptr_t *)nfjson_context_pop(c, sizeof(uintptr_t))));
+            return parse_status; 
+        }
+        nfjson_parse_whitespace(c);
+        if (*c->json == ',') {
+            c->json++;
+            nfjson_parse_whitespace(c);
+            if (*c->json == ']') { return NFJSON_EXTRA_COMMA; }
+        }
+    }
+    c->json++;
+    val->u.a.len = len;
+    /*nfjson_value *array[] = malloc(sizeof(nfjson_value *)*len);*/ //expect continuous memory
+    if (len) {
+        nfjson_value *array = malloc(sizeof(nfjson_value)*len);
+        memset(array, 0, sizeof(nfjson_value)*len);
+        for (; len; len--) {
+            //expect continuous memory
+            /* *(array + len - 1) = (nfjson_value *)nfjson_context_pop(c, sizeof(uintptr_t)); */
+            nfjson_value *vp = (nfjson_value *)(*(uintptr_t *)nfjson_context_pop(c, sizeof(uintptr_t)));
+            *(array + len - 1) = *vp;
+            free(vp);
+        }
+        val->u.a.e = array;
+    }
+    else val->u.a.e = NULL;
+    val->type = JSON_ARRAY;
+    return NFJSON_PARSE_OK;
 }
 
 /* value = null / false / true / number */
@@ -275,6 +322,7 @@ static int nfjson_parse_value(nfjson_context *c, nfjson_value *val) {
     case '7':case '8':case '9':case '-':
         return nfjson_parse_number(c, val);
     case '"':return nfjson_parse_string(c, val);
+    case '[':return nfjson_parse_array(c, val);
     case '\0': return NFJSON_PARSE_EXPECT_VALUE;
     default:  return NFJSON_PARSE_INVALID_VALUE;
     }
@@ -292,7 +340,7 @@ int nfjson_parse(nfjson_value *val, const char *json) {
     int parse_status = nfjson_parse_value(&context, val);
     if (parse_status == NFJSON_PARSE_OK){
         nfjson_parse_whitespace(&context);
-        if(*(context.json)) return NFJSON_PARSE_ROOT_NOT_SINGULAR;
+        if(*(context.json)) parse_status = NFJSON_PARSE_ROOT_NOT_SINGULAR;
     }
     assert(context.top == 0);
     free(context.stack);

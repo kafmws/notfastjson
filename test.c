@@ -20,7 +20,7 @@ static int test_pass = 0;
     } while(0)
 
 #define EXPECT_EQ_INT(expect, actual) EXPECT_EQ_BASE((expect) == (actual), expect, actual, "%d")
-#define EXPECT_EQ_DOUBLE(expect, actual) EXPECT_EQ_BASE(fabs((expect) - (actual))<1e6, (expect), (actual), "%f")
+#define EXPECT_EQ_DOUBLE(expect, actual) EXPECT_EQ_BASE(fabs((double)(expect) - (double)(actual))<1e6, (double)(expect), (double)(actual), "%f")
 #define EXPECT_NOT_EQ_INT(expect, actual) EXPECT_EQ_BASE((expect) != (actual), expect, actual, "%d")
 
 #define TEST(expect, json, json_type) \
@@ -28,6 +28,7 @@ static int test_pass = 0;
                     nfjson_value v;\
                     EXPECT_EQ_INT(expect, nfjson_parse(&v, json));\
                     EXPECT_EQ_INT(json_type, nfjson_get_type(&v));\
+                    nfjson_free(&v);\
                 } while (0)
 
 #define TEST_ERROR(expect, json) TEST(expect, json, JSON_UNRESOLVED)
@@ -36,10 +37,11 @@ static int test_pass = 0;
 
 #define TEST_NUMBER(expect, json) \
                 do{\
-                nfjson_value v;\
-                EXPECT_EQ_INT(NFJSON_PARSE_OK, nfjson_parse(&v, json));\
-                EXPECT_EQ_INT(JSON_NUMBER, nfjson_get_type(&v));\
-                EXPECT_EQ_DOUBLE(expect, nfjson_get_number(&v));\
+                    nfjson_value v;\
+                    EXPECT_EQ_INT(NFJSON_PARSE_OK, nfjson_parse(&v, json));\
+                    EXPECT_EQ_INT(JSON_NUMBER, nfjson_get_type(&v));\
+                    EXPECT_EQ_DOUBLE(expect, nfjson_get_number(&v));\
+                    nfjson_free(&v);\
                 }while(0)
 
 static void test_parse_null() {
@@ -149,6 +151,7 @@ static void test_access_string() {
                     EXPECT_EQ_INT(NFJSON_PARSE_OK, nfjson_parse(&val, json)); \
                     EXPECT_EQ_INT(JSON_STRING, nfjson_get_type(&val)); \
                     EXPECT_EQ_STRING(expect, nfjson_get_string(&val), nfjson_get_string_length(&val)); \
+                    nfjson_free(&val);\
                }while(0)
 
 static void test_parse_string() {
@@ -232,6 +235,73 @@ static void test_parse_invalid_unicode_surrogate() {
     TEST_ERROR(NFJSON_PARSE_INVALID_UNICODE_SURROGATE, "\"\\uD800\\uE000\"");
 }
 
+#define EXPECT_EQ_SIZE_T(expect, actual) EXPECT_EQ_BASE((size_t)(expect)== (size_t)(actual), (size_t)(expect), (size_t)(actual), "%zu")
+
+#define TEST_ARRAY_LITERAL(expect, array, index) \
+            EXPECT_EQ_INT(expect, nfjson_get_type(nfjson_get_array_element(array, (index))))
+
+#define TEST_ARRAY_NUMBER(expect, array, index) \
+        do{\
+            nfjson_value *__val = nfjson_get_array_element(array, (index));\
+            EXPECT_EQ_INT(JSON_NUMBER, nfjson_get_type(__val));\
+            EXPECT_EQ_DOUBLE((expect), nfjson_get_number(__val));\
+        }while (0)
+
+#define TEST_ARRAY_STRING(expect, array, index) \
+        do{\
+            nfjson_value *__val = nfjson_get_array_element(array, (index));\
+            EXPECT_EQ_INT(JSON_STRING, nfjson_get_type(__val));\
+            EXPECT_EQ_STRING(expect, nfjson_get_string(__val), strlen(expect));\
+        }while (0)
+
+#define TEST_ARRAY(val, json, array_size)\
+        do{\
+            EXPECT_EQ_INT(NFJSON_PARSE_OK, nfjson_parse(val, json));\
+            EXPECT_EQ_INT(JSON_ARRAY, nfjson_get_type(val));\
+            EXPECT_EQ_SIZE_T(array_size, nfjson_get_array_size(val));\
+        }while (0)
+
+static void test_parse_array() {
+    nfjson_value v;
+    TEST_ARRAY(&v, "[ ]", 0);
+    nfjson_free(&v);
+    TEST_ARRAY(&v, "[ null ,false ,  true,123,\"abc\" ]", 5);
+    TEST_ARRAY_LITERAL(JSON_NULL, &v, 0);
+    TEST_ARRAY_LITERAL(JSON_FALSE, &v, 1);
+    TEST_ARRAY_LITERAL(JSON_TRUE, &v, 2);
+    TEST_ARRAY_NUMBER(123, &v, 3);
+    TEST_ARRAY_STRING("abc", &v, 4);
+    nfjson_free(&v);
+    TEST_ARRAY(&v, "[ [ ] , [0 ] ,[0,1],     [ 0 ,1  ,   2   ] ]", 4);
+    nfjson_value *val = nfjson_get_array_element(&v, 0);
+    EXPECT_EQ_SIZE_T(0, nfjson_get_array_size(val));
+    val = nfjson_get_array_element(&v, 1);
+    EXPECT_EQ_SIZE_T(1, nfjson_get_array_size(val));
+    TEST_ARRAY_NUMBER(0, val, 0);
+    val++;
+    EXPECT_EQ_SIZE_T(2, nfjson_get_array_size(val));
+    TEST_ARRAY_NUMBER(0, val, 0);
+    TEST_ARRAY_NUMBER(1, val, 1);
+    val++;
+    EXPECT_EQ_SIZE_T(3, nfjson_get_array_size(val));
+    TEST_ARRAY_NUMBER(0, val, 0);
+    TEST_ARRAY_NUMBER(1, val, 1);
+    TEST_ARRAY_NUMBER(2, val, 2);
+    nfjson_free(&v);
+    TEST_ARRAY(&v, "[ [ [],[[] ]] ]", 1);
+    val = nfjson_get_array_element(&v, 0);
+    EXPECT_EQ_SIZE_T(2, nfjson_get_array_size(val));
+    val = nfjson_get_array_element(val, 0);
+    EXPECT_EQ_SIZE_T(0, nfjson_get_array_size(val));
+    val++;
+    EXPECT_EQ_SIZE_T(1, nfjson_get_array_size(val));
+    val = nfjson_get_array_element(val, 0);
+    EXPECT_EQ_SIZE_T(0, nfjson_get_array_size(val));
+    nfjson_free(&v);
+    TEST_ARRAY(&v, "[ [ [],[[] ]] ]", 1);
+    nfjson_free(&v);
+}
+
 static void test_parse() {
     #if 0
     test_parse_null();
@@ -253,9 +323,11 @@ static void test_parse() {
     test_access_number();
     test_parse_invalid_unicode_hex();
     test_parse_invalid_unicode_surrogate();
+    test_parse_array();
 }
 
 int main() {
+    _CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
     test_parse();
     printf("%d/%d (%3.2f%%) passed\n", test_pass, test_count, test_pass * 100.0 / test_count);
     return main_ret;

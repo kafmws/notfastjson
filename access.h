@@ -18,3 +18,7 @@ const char * nfjson_get_string(const nfjson_value * val);
 size_t nfjson_get_string_length(const nfjson_value * val);
 
 void nfjson_set_string(nfjson_value * val, const char * s, size_t len);
+
+size_t nfjson_get_array_size(const nfjson_value * val);
+
+nfjson_value * nfjson_get_array_element(const nfjson_value * val, size_t index);

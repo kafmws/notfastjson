@@ -56,3 +56,14 @@ void nfjson_set_string(nfjson_value *val, const char *s, size_t len) {
     val->u.s.len = len;
     val->type = JSON_STRING;
 }
+
+size_t nfjson_get_array_size(const nfjson_value *val) {
+    assert(val && val->type == JSON_ARRAY);
+    return val->u.a.len;
+}
+
+nfjson_value *nfjson_get_array_element(const nfjson_value *val, size_t index) {
+    assert(val && val->type == JSON_ARRAY);
+    if (index < val->u.a.len) return val->u.a.e + index;
+    return NULL;
+}
