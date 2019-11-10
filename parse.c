@@ -254,7 +254,7 @@ static int nfjson_parse_string(nfjson_context *c, nfjson_value *val) {
             case 'u':
                 parse_status = nfjson_parse_unicode_char(&str, &u);
                 if (parse_status == NFJSON_PARSE_OK) nfjson_encode_unicode_codepoint(c, u);
-                else return parse_status;
+                else { c->top = begin; return parse_status; }
                 break;
             default: c->top = begin; c->json = str; return NFJSON_PARSE_INVALID_STRING_ESCAPE;
             }break;
@@ -282,7 +282,8 @@ static int nfjson_parse_array(nfjson_context *c, nfjson_value *val) {
             len++;
         }
         else {
-            for (; len >= 0; len--) free((nfjson_value *)(*(uintptr_t *)nfjson_context_pop(c, sizeof(uintptr_t))));
+            if(len) for (; len > 0; len--) free((nfjson_value *)(*(uintptr_t *)nfjson_context_pop(c, sizeof(uintptr_t))));
+            else free(v);
             return parse_status; 
         }
         nfjson_parse_whitespace(c);
