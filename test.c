@@ -3,6 +3,7 @@
 #include"parse.h"
 #include"access.h"
 #include"memory.h"
+#include"hash_table.h"
 
 static int main_ret = 0;
 static int test_count = 0;
@@ -25,10 +26,10 @@ static int test_pass = 0;
 
 #define TEST(expect, json, json_type) \
                 do{\
-                    nfjson_value v;\
-                    EXPECT_EQ_INT(expect, nfjson_parse(&v, json));\
-                    EXPECT_EQ_INT(json_type, nfjson_get_type(&v));\
-                    nfjson_free(&v);\
+                    nfjson_value __v;\
+                    EXPECT_EQ_INT(expect, nfjson_parse(&__v, json));\
+                    EXPECT_EQ_INT(json_type, nfjson_get_type(&__v));\
+                    nfjson_free(&__v);\
                 } while (0)
 
 #define TEST_ERROR(expect, json) TEST(expect, json, JSON_UNRESOLVED)
@@ -37,11 +38,11 @@ static int test_pass = 0;
 
 #define TEST_NUMBER(expect, json) \
                 do{\
-                    nfjson_value v;\
-                    EXPECT_EQ_INT(NFJSON_PARSE_OK, nfjson_parse(&v, json));\
-                    EXPECT_EQ_INT(JSON_NUMBER, nfjson_get_type(&v));\
-                    EXPECT_EQ_DOUBLE(expect, nfjson_get_number(&v));\
-                    nfjson_free(&v);\
+                    nfjson_value __v;\
+                    EXPECT_EQ_INT(NFJSON_PARSE_OK, nfjson_parse(&__v, json));\
+                    EXPECT_EQ_INT(JSON_NUMBER, nfjson_get_type(&__v));\
+                    EXPECT_EQ_DOUBLE(expect, nfjson_get_number(&__v));\
+                    nfjson_free(&__v);\
                 }while(0)
 
 static void test_parse_null() {
@@ -147,11 +148,11 @@ static void test_access_string() {
 
 #define TEST_STRING(expect, json) \
                do{\
-                    nfjson_value val;\
-                    EXPECT_EQ_INT(NFJSON_PARSE_OK, nfjson_parse(&val, json)); \
-                    EXPECT_EQ_INT(JSON_STRING, nfjson_get_type(&val)); \
-                    EXPECT_EQ_STRING(expect, nfjson_get_string(&val), nfjson_get_string_length(&val)); \
-                    nfjson_free(&val);\
+                    nfjson_value __val;\
+                    EXPECT_EQ_INT(NFJSON_PARSE_OK, nfjson_parse(&__val, json)); \
+                    EXPECT_EQ_INT(JSON_STRING, nfjson_get_type(&__val)); \
+                    EXPECT_EQ_STRING(expect, nfjson_get_string(&__val), nfjson_get_string_length(&__val)); \
+                    nfjson_free(&__val);\
                }while(0)
 
 static void test_parse_string() {
@@ -258,6 +259,7 @@ static void test_parse_invalid_unicode_surrogate() {
         do{\
             EXPECT_EQ_INT(NFJSON_PARSE_OK, nfjson_parse(val, json));\
             EXPECT_EQ_INT(JSON_ARRAY, nfjson_get_type(val));\
+            if(JSON_ARRAY == nfjson_get_type(val))\
             EXPECT_EQ_SIZE_T(array_size, nfjson_get_array_size(val));\
         }while (0)
 
@@ -298,8 +300,47 @@ static void test_parse_array() {
     val = nfjson_get_array_element(val, 0);
     EXPECT_EQ_SIZE_T(0, nfjson_get_array_size(val));
     nfjson_free(&v);
-    TEST_ARRAY(&v, "[ [ [],[[] ]] ]", 1);
+    TEST_ARRAY(&v, "[ [ [\"1\\uDBDF\\uDFFF\"],[] ]] ", 1);//check unsuccess, memory weaks
     nfjson_free(&v);
+}
+
+#define EXPECT_EQ_POINTER(expect, actual) \
+    EXPECT_EQ_BASE((uintptr_t)(expect)== (uintptr_t)(actual), (uintptr_t)(expect), (uintptr_t)(actual), "0x%llu")
+
+void test_hash_table() {
+    hash_table *table = new_hash_table(17);
+    char *values[] = { "value1","value2", "value3" };
+    EXPECT_EQ_POINTER(hash_table_put(table, "key0", values[0]), hash_table_put(table, "key1", values[0]));
+    EXPECT_EQ_POINTER(hash_table_get(table, "key1"), values[0]);
+    EXPECT_EQ_POINTER(hash_table_get(table, "key1"), hash_table_get(table, "key0"));
+    EXPECT_EQ_POINTER(hash_table_put(table, "key1", values[2]), values[0]);
+    EXPECT_EQ_POINTER(hash_table_get(table, "key2"), hash_table_get(table, "key3"));
+    hash_table_free(table);
+    table = new_hash_table(1);
+    char keybase[] = "key";
+    char *keys[32769] = { 0 };
+    int *vals[32769] = { 0 };
+    for (int i = 0; i < 32768; i++) {
+        char *key = (char *)malloc(sizeof(char) * 10);
+        keys[i] = key;
+        sprintf(key, "%s%d", keybase, i);
+        int *val = (int *)malloc(sizeof(int));
+        *val = i;
+        vals[i] = val;
+        EXPECT_EQ_POINTER(hash_table_put(table, key, val), (void *)0);
+    }
+
+    for (int j = 0; j < 32768; j++) {
+        char key[15];
+        strcpy(key, keys[j]);
+        void *val = hash_table_remove(table, keys[j]);
+        EXPECT_EQ_INT(*(int *)val, j);
+        free(val);
+        val = hash_table_remove(table, key);
+        EXPECT_EQ_POINTER(val, (void *)0);
+    }
+    hash_table_free(table);
+    for (int i = 0; i < 32768; i++) free(keys[i]);
 }
 
 static void test_parse() {
@@ -324,6 +365,7 @@ static void test_parse() {
     test_parse_invalid_unicode_hex();
     test_parse_invalid_unicode_surrogate();
     test_parse_array();
+    test_hash_table();
 }
 
 int main() {
