@@ -313,6 +313,18 @@ static int nfjson_parse_array(nfjson_context *c, nfjson_value *val) {
     return NFJSON_PARSE_OK;
 }
 
+/**
+*   member = string ws %x3A ws value
+*   object = %x7B ws [ member *( ws %x2C ws member ) ] ws %x7D
+**/
+static int nfjson_parse_object(nfjson_context *c, nfjson_value *val) {
+    c->json++;
+    nfjson_parse_whitespace(c);
+    nfjson_value value_key;
+    /*int parse_status = nfjson_parse_string();*/
+    /*char *key = malloc(sizeof(char)*)*/
+}
+
 /* value = null / false / true / number */
 static int nfjson_parse_value(nfjson_context *c, nfjson_value *val) {
     switch (*(c->json)) {
@@ -324,6 +336,7 @@ static int nfjson_parse_value(nfjson_context *c, nfjson_value *val) {
         return nfjson_parse_number(c, val);
     case '"':return nfjson_parse_string(c, val);
     case '[':return nfjson_parse_array(c, val);
+    case '{':return nfjson_parse_object(c, val);
     case '\0': return NFJSON_PARSE_EXPECT_VALUE;
     default:  return NFJSON_PARSE_INVALID_VALUE;
     }

@@ -10,7 +10,7 @@ void nfjson_init(nfjson_value *val) {
 
 void nfjson_free(nfjson_value *val) {
     assert(val);
-    if (val->type == JSON_UNRESOLVED)return;
+    /*if (val->type == JSON_UNRESOLVED)return;
     if (val->type == JSON_STRING) { free(val->u.s.s); val->u.s.s = NULL; }
     else if (val->type == JSON_ARRAY) {
         int len = (int)val->u.a.len - 1;
@@ -18,6 +18,22 @@ void nfjson_free(nfjson_value *val) {
             nfjson_free(val->u.a.e + len);
         }
         if(val->u.a.e)free(val->u.a.e);
+    }*/
+    switch (val->type) {
+    case JSON_UNRESOLVED:
+        return;
+    case JSON_STRING:
+        free(val->u.s.s); val->u.s.s = NULL; break;
+    case JSON_ARRAY:
+    {
+        int len = (int)val->u.a.len - 1;
+        for (; len >= 0; len--) {
+            nfjson_free(val->u.a.e + len);
+        }
+        if (val->u.a.e)free(val->u.a.e); 
+    }
+    default:
+        break;
     }
     val->type = JSON_UNRESOLVED;
 }

@@ -20,6 +20,6 @@ void * hash_table_put(hash_table * ht, char * key, void * val);
 
 void * hash_table_get(hash_table * ht, char * key);
 
-void * hash_table_remove(hash_table * ht, char * key);
+void * hash_table_remove(hash_table * ht, char * key);//free key in kv
 
-void hash_table_free(hash_table * ht);
+void hash_table_free(hash_table * ht);//free key and value

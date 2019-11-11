@@ -26,14 +26,16 @@ void extend(hash_table *ht) {
     ht->cnt++;
     if (ht->cnt*1.0 / ht->table_size > 0.75 && ht->table_size << 1 <= 1073741824) {//1073741824    1<<30
         int old_size = ht->table_size;
-        kv **old_table = ht->table;
         ht->table_size <<= 1;
-        ht->table = (kv **)malloc(sizeof(kv *)*ht->table_size);
-        memset(ht->table, 0, sizeof(kv *)*ht->table_size);
+        ht->table = (kv **)realloc(ht->table, sizeof(kv *)*ht->table_size);
+        memset(ht->table + old_size, 0, sizeof(kv *)*old_size);
+        kv **table = ht->table;
+        
         //move all kv to new table
-        for (int i = 0; i < old_size; i++) {
-            if (old_table[i]) {
-                kv *kv_list = old_table[i];
+        int i = 0;
+        for (; i < old_size; i++) {
+            if (table[i]) {
+                kv *kv_list = table[i];
                 kv *lowHead = NULL, *lowTail = NULL, *highHead = NULL, *highTail = NULL;
                 do {//move the list
                     if (kv_list->hash & old_size) {//move
@@ -41,17 +43,20 @@ void extend(hash_table *ht) {
                         else { highTail->next = kv_list; }
                         highTail = kv_list;
                     }
-                    else {
+                    else {//not move
                         if (lowHead == NULL) { lowHead = kv_list; }
                         else { lowTail->next = kv_list; }
                         lowTail = kv_list;
                     }
                 } while (kv_list = kv_list->next);
-                if (lowTail) { lowTail->next = NULL; ht->table[i] = lowHead; }
-                if (highTail) { highTail->next = NULL; ht->table[i + old_size] = highHead; }
+                if(lowTail) lowTail->next = NULL;
+                if (highTail) { 
+                    highTail->next = NULL;
+                    ht->table[i] = lowHead;
+                    ht->table[i + old_size] = highHead; 
+                }
             }
         }
-        free(old_table);
     }
 }
 
@@ -88,7 +93,7 @@ void *hash_table_get(hash_table *ht, char *key) {
     return NULL;
 }
 
-void *hash_table_remove(hash_table *ht, char *key) {
+void *hash_table_remove(hash_table *ht, char *key) {// free key in kv
     int hash = hashcode(key);
     int h = hash & (ht->table_size - 1);
     kv *kv_list = ht->table[h];
@@ -104,7 +109,7 @@ void *hash_table_remove(hash_table *ht, char *key) {
             kv_list = kv_list->next;
         }
         if (obj) {
-            /*if(key != obj->key)free(obj->key);*/
+            free(obj->key);
             void *val = obj->val;
             free(obj);
             ht->cnt--;
@@ -114,13 +119,15 @@ void *hash_table_remove(hash_table *ht, char *key) {
     return NULL;
 }
 
-void hash_table_free(hash_table *ht) {
+void hash_table_free(hash_table *ht) {//free key and value
     int cnt = ht->cnt, i = 0;
     kv *del = NULL;
     while (cnt) {
         while (ht->table[i]) {
             del = ht->table[i];
             ht->table[i] = del->next;
+            free(del->key);
+            free(del->val);
             free(del);
             cnt--;
         }

@@ -1,5 +1,6 @@
 #pragma once
 #include"pch.h"
+#include"hash_table.h"
 
 typedef enum {
     JSON_NULL, JSON_FALSE, JSON_TRUE, JSON_NUMBER, JSON_STRING, 
@@ -27,6 +28,7 @@ struct nfjson_value {
     union {
         struct { char *s; size_t len; }s;/* type == JSON_STRING */
         struct { nfjson_value *e; size_t len; }a;/* type == JSON_ARRAY */
+        hash_table *hto;/* type == JSON_OBJECT */
         double n;/* type == JSON_NUMBER */
     }u;
     nfjson_type type;
