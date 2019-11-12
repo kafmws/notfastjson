@@ -228,21 +228,21 @@ static int nfjson_encode_unicode_codepoint(nfjson_context *c, unsigned int cp) {
 *   quotation-mark = %x22  ; "
 *   unescaped = %x20-21 / %x23-5B / %x5D-10FFFF
 **/
-static int nfjson_parse_string(nfjson_context *c, nfjson_value *val) {
-    size_t len;
+static int nfjson_parse_string_raw(nfjson_context *c, char **s, size_t *len) {
+    *s = NULL;
     size_t begin = c->top;
     int ch, parse_status;
     unsigned int u;
     const char *str = c->json + 1;
     while (1) {
-        switch (ch = *str++){
+        switch (ch = *str++) {
         case '"':
-            len = c->top - begin;
+            *len = c->top - begin;
             c->json = str;
-            nfjson_set_string(val, (const char *)nfjson_context_pop(c, len), len);
+            *s = (const char *)nfjson_context_pop(c, *len);
             return NFJSON_PARSE_OK;
         case '\\':
-            switch (ch = *str++){
+            switch (ch = *str++) {
             case '"':PUSHC(c, '\"'); break;
             case '\\':PUSHC(c, '\\'); break;
             case '/':PUSHC(c, '/'); break;
@@ -267,6 +267,15 @@ static int nfjson_parse_string(nfjson_context *c, nfjson_value *val) {
     }
 }
 
+static int nfjson_parse_string(nfjson_context *c, nfjson_value *val) {
+    char *s;
+    size_t len;
+    int parse_status;
+    if((parse_status = nfjson_parse_string_raw(c, &s, &len)) == NFJSON_PARSE_OK)
+        nfjson_set_string(val, (const char *)s, len);
+    return parse_status;
+}
+
 static int nfjson_parse_value();
 
 /* array = %x5B ws [ value *( ws %x2C ws value ) ] ws %x5D */
@@ -276,6 +285,7 @@ static int nfjson_parse_array(nfjson_context *c, nfjson_value *val) {
     size_t len = 0;
     while (*c->json != ']') {
         nfjson_value *v = (nfjson_value *)malloc(sizeof(nfjson_value));
+        memset(v, 0, sizeof(nfjson_value));
         int parse_status = nfjson_parse_value(c, v);
         if (parse_status == NFJSON_PARSE_OK) {
             *(uintptr_t *)nfjson_context_push(c, sizeof(uintptr_t)) = (uintptr_t)v;
@@ -313,6 +323,15 @@ static int nfjson_parse_array(nfjson_context *c, nfjson_value *val) {
     return NFJSON_PARSE_OK;
 }
 
+int nfjson_parse_nfjson_string(nfjson_context *c, nfjson_string *s) {
+    char *str = NULL;
+    size_t len = 0;
+    int parse_status = nfjson_parse_string_raw(c, &str, &len);
+    s->s = str;
+    s->len = len;
+    return parse_status;
+}
+
 /**
 *   member = string ws %x3A ws value
 *   object = %x7B ws [ member *( ws %x2C ws member ) ] ws %x7D
@@ -320,8 +339,9 @@ static int nfjson_parse_array(nfjson_context *c, nfjson_value *val) {
 static int nfjson_parse_object(nfjson_context *c, nfjson_value *val) {
     c->json++;
     nfjson_parse_whitespace(c);
-    nfjson_value value_key;
-    /*int parse_status = nfjson_parse_string();*/
+    char *key;
+    nfjson_value value;
+    /*int parse_status = nfjson_parse_string_raw(c, &s, );*/
     /*char *key = malloc(sizeof(char)*)*/
 }
 

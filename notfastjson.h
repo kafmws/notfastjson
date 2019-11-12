@@ -24,9 +24,11 @@ enum {
 
 typedef struct nfjson_value nfjson_value;
 
+typedef struct { char *s; size_t len; } nfjson_string;
+
 struct nfjson_value {
     union {
-        struct { char *s; size_t len; }s;/* type == JSON_STRING */
+        nfjson_string s;/* type == JSON_STRING */
         struct { nfjson_value *e; size_t len; }a;/* type == JSON_ARRAY */
         hash_table *hto;/* type == JSON_OBJECT */
         double n;/* type == JSON_NUMBER */

@@ -305,14 +305,15 @@ static void test_parse_array() {
 }
 
 #define EXPECT_EQ_POINTER(expect, actual) \
-    EXPECT_EQ_BASE((uintptr_t)(expect)== (uintptr_t)(actual), (uintptr_t)(expect), (uintptr_t)(actual), "0x%llu")
+    EXPECT_EQ_BASE((uintptr_t)(expect) == (uintptr_t)(actual), (uintptr_t)(expect), (uintptr_t)(actual), "0x%llu")
 
-void test_hash_table() {
-    hash_table *table = new_hash_table(1);
+static void test_hash_table_char_key() {
+    hash_table *table = new_hash_table(1, NULL, NULL, NULL, NULL);
     char keybase[] = "key";
     char *keys[32769] = { 0 };
     int *vals[32769] = { 0 };
-    for (int i = 0; i < 32768; i++) {
+    int i, j;
+    for (i = 0; i < 32768; i++) {
         char *key = (char *)malloc(sizeof(char) * 10);
         keys[i] = key;
         sprintf(key, "%s%d", keybase, i);
@@ -323,11 +324,60 @@ void test_hash_table() {
         EXPECT_EQ_POINTER(p, (void *)0);
     }
 
-    for (int j = 0; j < 32768; j++) {
+    for (j = 0; j < 32768; j++) {
         char key[15];
         strcpy(key, keys[j]);
         void *val = hash_table_remove(table, key);
-        if (!val)continue;
+        EXPECT_EQ_INT(*(int *)val, j);
+        free(val);
+        val = hash_table_remove(table, key);
+        EXPECT_EQ_POINTER(val, (void *)0);
+    }
+    hash_table_free(table);
+}
+
+static unsigned int hashcode(nfjson_string *key) {
+    unsigned int hash = 0;
+    int i;
+    char *s = key->s;
+    for (i = (int)key->len; i >= 0; i--) {
+        hash = hash * 33 + s[i];
+    }
+    return hash;
+}
+
+static int cmp_nfjson_string_key(const void *k, const void *key) {
+    return memcmp(((nfjson_string *)k)->s, ((nfjson_string *)key)->s, ((nfjson_string *)key)->len);
+}
+
+static void test_hash_table_nfjson_string_key() {
+    hash_table *table = new_hash_table(16, hashcode, 
+                                            cmp_nfjson_string_key, nfjson_free_nfjson_string, NULL);
+    int i, j;
+    char keybase[] = "key";
+    int *vals[32769] = { 0 };
+    for (i = 0; i < 32768; i++) {
+        char key[10] = { 0 };
+        sprintf(key, "%s%d", keybase, i);
+        nfjson_string *str = malloc(sizeof(nfjson_string));
+        char *s = malloc(sizeof(char) * 10);
+        memcpy(s, key, sizeof(key));
+        str->s = s;
+        str->len = strlen(key);
+        int *val = (int *)malloc(sizeof(int));
+        *val = i;
+        vals[i] = val;
+        void *p = hash_table_put(table, str, val);
+        EXPECT_EQ_POINTER(p, (void *)0);
+    }
+
+    for (j = 0; j < 32768; j++) {
+        char key[10] = { 0 };
+        sprintf(key, "%s%d", keybase, j);
+        nfjson_string key_string;
+        key_string.s = key;
+        key_string.len = strlen(key);
+        void *val = hash_table_remove(table, &key_string);
         EXPECT_EQ_INT(*(int *)val, j);
         free(val);
         val = hash_table_remove(table, key);
@@ -358,7 +408,10 @@ static void test_parse() {
     test_parse_invalid_unicode_hex();
     test_parse_invalid_unicode_surrogate();
     test_parse_array();
-    test_hash_table();
+    #if 1
+    test_hash_table_char_key();
+    test_hash_table_nfjson_string_key();
+    #endif
 }
 
 int main() {

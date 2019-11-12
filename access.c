@@ -48,7 +48,7 @@ size_t nfjson_get_string_length(const nfjson_value *val) {
 }
 
 void nfjson_set_string(nfjson_value *val, const char *s, size_t len) {
-    assert(val && (s || len == 0));
+    assert(val && (s || len == 0));//s==0 ""
     nfjson_free(val);
     val->u.s.s = (char *)malloc(sizeof(char)*(len + 1));
     memcpy(val->u.s.s, s, len);

@@ -1,7 +1,17 @@
 #include"pch.h"
 #include"hash_table.h"
 
-hash_table *new_hash_table(int init_capacity) {
+static unsigned int hashcode(char *key) {
+    unsigned int hash = 0;
+    while (*key) {
+        hash = hash * 33 + *key;
+        key++;
+    }
+    return hash;
+}
+
+hash_table *new_hash_table(int init_capacity, unsigned int(*hash_func)(void *key),
+    int(*cmp_func)(const void *k, const void *key), void(*free_key)(void *ptr), void(*free_value)(void *ptr)){
     float f = (float)(init_capacity - 1);
     init_capacity = 1 << ((*(unsigned int*)(&f) >> 23) - 126);
     if (init_capacity < 16) init_capacity = 16;
@@ -10,16 +20,11 @@ hash_table *new_hash_table(int init_capacity) {
     memset(ht->table, 0, sizeof(kv *)*init_capacity);
     ht->cnt = 0;
     ht->table_size = init_capacity;
+    ht->hash_func = hash_func ? hash_func : hashcode;
+    ht->cmp_func = cmp_func ? cmp_func : strcmp;
+    ht->free_key = free_key ? free_key : free;
+    ht->free_value = free_value ? free_value : free;
     return ht;
-}
-
-unsigned int hashcode(char *key) {
-    unsigned int hash = 0;
-    while (*key) {
-        hash = hash * 33 + *key;
-        key++;
-    }
-    return hash;
 }
 
 void extend(hash_table *ht) {
@@ -60,12 +65,12 @@ void extend(hash_table *ht) {
     }
 }
 
-void *hash_table_put(hash_table *ht, char *key, void *val) {//return oldval when update else return NULL
-    int hash = hashcode(key);
+void *hash_table_put(hash_table *ht, void *key, void *val) {//return oldval when update else return NULL
+    int hash = ht->hash_func(key);
     int h = hash & (ht->table_size - 1);
     kv *kv_list = ht->table[h];
     while (kv_list) {
-        if (hash == kv_list->hash && strcmp(kv_list->key, key) == 0) {
+        if (hash == kv_list->hash && ht->cmp_func(key, kv_list->key) == 0) {
             void *old = kv_list->val;
             kv_list->val = val;
             return old;
@@ -82,26 +87,26 @@ void *hash_table_put(hash_table *ht, char *key, void *val) {//return oldval when
     return NULL;
 }
 
-void *hash_table_get(hash_table *ht, char *key) {
-    int hash = hashcode(key);
+void *hash_table_get(hash_table *ht, void *key) {
+    int hash = ht->hash_func(key);
     int h = hash & (ht->table_size - 1);
     kv *kv_list = ht->table[h];
     while (kv_list) {
-        if (hash == kv_list->hash && strcmp(kv_list->key, key) == 0)return kv_list->val;
+        if (hash == kv_list->hash && ht->cmp_func(kv_list->key, key) == 0)return kv_list->val;
         else kv_list = kv_list->next;
     }
     return NULL;
 }
 
-void *hash_table_remove(hash_table *ht, char *key) {// free key in kv
-    int hash = hashcode(key);
+void *hash_table_remove(hash_table *ht, void *key) {// free key in kv
+    int hash = ht->hash_func(key);
     int h = hash & (ht->table_size - 1);
     kv *kv_list = ht->table[h];
     if (kv_list) {
         kv *obj = NULL;
-        if (hash == kv_list->hash && strcmp(key, kv_list->key) == 0) { obj = kv_list; ht->table[h] = kv_list->next; }
+        if (hash == kv_list->hash && ht->cmp_func(key, kv_list->key) == 0) { obj = kv_list; ht->table[h] = kv_list->next; }
         else while (kv_list->next) {
-            if (hash == kv_list->next->hash && strcmp(key, kv_list->next->key) == 0) {
+            if (hash == kv_list->next->hash && ht->cmp_func(key, kv_list->next->key) == 0) {
                 obj = kv_list->next;
                 kv_list->next = obj->next;
                 break;
@@ -109,7 +114,7 @@ void *hash_table_remove(hash_table *ht, char *key) {// free key in kv
             kv_list = kv_list->next;
         }
         if (obj) {
-            free(obj->key);
+            ht->free_key(obj->key);
             void *val = obj->val;
             free(obj);
             ht->cnt--;
@@ -122,12 +127,14 @@ void *hash_table_remove(hash_table *ht, char *key) {// free key in kv
 void hash_table_free(hash_table *ht) {//free key and value
     int cnt = ht->cnt, i = 0;
     kv *del = NULL;
+    void (*ht_free_key)() = ht->free_key;
+    void (*ht_free_val)() = ht->free_value;
     while (cnt) {
         while (ht->table[i]) {
             del = ht->table[i];
             ht->table[i] = del->next;
-            free(del->key);
-            free(del->val);
+            ht_free_key(del->key);
+            ht->free_value(del->val);
             free(del);
             cnt--;
         }
