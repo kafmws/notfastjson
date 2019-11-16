@@ -70,11 +70,19 @@ static void test_parse_invalid_value() {
     TEST_ERROR(NFJSON_PARSE_INVALID_VALUE, "inf");
     TEST_ERROR(NFJSON_PARSE_INVALID_VALUE, "NAN");
     TEST_ERROR(NFJSON_PARSE_INVALID_VALUE, "nan");
+
+    //test in array
+    TEST_ERROR(NFJSON_PARSE_INVALID_VALUE, "[\"a\", nul]");
 }
 
 static void test_parse_expect_value() {
     TEST_ERROR(NFJSON_PARSE_EXPECT_VALUE, "");
     TEST_ERROR(NFJSON_PARSE_EXPECT_VALUE, " ");
+
+    //test in array
+    TEST_ERROR(NFJSON_PARSE_EXPECT_VALUE, "[,");
+    TEST_ERROR(NFJSON_PARSE_EXPECT_VALUE, "[,]");
+    TEST_ERROR(NFJSON_PARSE_EXPECT_VALUE, "[1.0,\"5\", [[,]] ,]");
 }
 
 static void test_parse_root_not_singular() {
@@ -160,6 +168,12 @@ static void test_parse_string() {
     TEST_STRING("Hello", "\"Hello\"");
     TEST_STRING("Hello\nWorld", "\"Hello\\nWorld\"");
     TEST_STRING("\" \\ / \b \f \n \r \t", "\"\\\" \\\\ \\/ \\b \\f \\n \\r \\t\"");
+    TEST_STRING("Hello\0World", "\"Hello\\u0000World\"");
+    TEST_STRING("\x24", "\"\\u0024\"");         /* Dollar sign U+0024 */
+    TEST_STRING("\xC2\xA2", "\"\\u00A2\"");     /* Cents sign U+00A2 */
+    TEST_STRING("\xE2\x82\xAC", "\"\\u20AC\""); /* Euro sign U+20AC */
+    TEST_STRING("\xF0\x9D\x84\x9E", "\"\\uD834\\uDD1E\"");  /* G clef sign U+1D11E */
+    TEST_STRING("\xF0\x9D\x84\x9E", "\"\\ud834\\udd1e\"");  /* G clef sign U+1D11E */
 }
 
 static void test_parse_missing_quotation_mark() {
@@ -226,6 +240,7 @@ static void test_parse_invalid_unicode_hex() {
     TEST_ERROR(NFJSON_PARSE_INVALID_UNICODE_HEX, "\"\\u00G0\"");
     TEST_ERROR(NFJSON_PARSE_INVALID_UNICODE_HEX, "\"\\u000/\"");
     TEST_ERROR(NFJSON_PARSE_INVALID_UNICODE_HEX, "\"\\u000G\"");
+    TEST_ERROR(NFJSON_PARSE_INVALID_UNICODE_HEX, "\"\\u 123\"");
 }
 
 static void test_parse_invalid_unicode_surrogate() {
@@ -304,6 +319,21 @@ static void test_parse_array() {
     nfjson_free(&v);
 }
 
+static void test_parse_array_extra_comma() {
+    //test in array
+    TEST_ERROR(NFJSON_EXTRA_COMMA, "[1,]");
+    TEST_ERROR(NFJSON_EXTRA_COMMA, "[1,\"5\",]");
+}
+
+static void test_parse_miss_comma_or_square_bracket() {
+    TEST_ERROR(NFJSON_PARSE_MISS_COMMA_OR_SQUARE_BRACKET, "[1");
+    TEST_ERROR(NFJSON_PARSE_MISS_COMMA_OR_SQUARE_BRACKET, "[1}");
+    TEST_ERROR(NFJSON_PARSE_MISS_COMMA_OR_SQUARE_BRACKET, "[1 2");
+    TEST_ERROR(NFJSON_PARSE_MISS_COMMA_OR_SQUARE_BRACKET, "[1 2]");
+    TEST_OK(JSON_ARRAY, "[1  ,2]");
+    TEST_ERROR(NFJSON_PARSE_MISS_COMMA_OR_SQUARE_BRACKET, "[[]");
+}
+
 #define EXPECT_EQ_POINTER(expect, actual) \
     EXPECT_EQ_BASE((uintptr_t)(expect) == (uintptr_t)(actual), (uintptr_t)(expect), (uintptr_t)(actual), "0x%llu")
 
@@ -352,7 +382,7 @@ static int cmp_nfjson_string_key(const void *k, const void *key) {
 
 static void test_hash_table_nfjson_string_key() {
     hash_table *table = new_hash_table(16, hashcode, 
-                                            cmp_nfjson_string_key, nfjson_free_nfjson_string, NULL);
+                                            cmp_nfjson_string_key, nfjson_string_free, NULL);
     int i, j;
     char keybase[] = "key";
     int *vals[32769] = { 0 };
@@ -370,7 +400,7 @@ static void test_hash_table_nfjson_string_key() {
         void *p = hash_table_put(table, str, val);
         EXPECT_EQ_POINTER(p, (void *)0);
     }
-
+    EXPECT_EQ_INT(32768, table->cnt);
     for (j = 0; j < 32768; j++) {
         char key[10] = { 0 };
         sprintf(key, "%s%d", keybase, j);
@@ -383,7 +413,116 @@ static void test_hash_table_nfjson_string_key() {
         val = hash_table_remove(table, key);
         EXPECT_EQ_POINTER(val, (void *)0);
     }
+    EXPECT_EQ_INT(0, table->cnt);
     hash_table_free(table);
+}
+
+static void test_parse_miss_key() {
+    TEST_ERROR(NFJSON_PARSE_MISS_KEY, "{:1,");
+    TEST_ERROR(NFJSON_PARSE_MISS_KEY, "{1:1,");
+    TEST_ERROR(NFJSON_PARSE_MISS_KEY, "{true:1,");
+    TEST_ERROR(NFJSON_PARSE_MISS_KEY, "{false:1,");
+    TEST_ERROR(NFJSON_PARSE_MISS_KEY, "{null:1,");
+    TEST_ERROR(NFJSON_PARSE_MISS_KEY, "{[]:1,");
+    TEST_ERROR(NFJSON_PARSE_MISS_KEY, "{{}:1,");
+    TEST_ERROR(NFJSON_PARSE_MISS_KEY, "{\"a\":1,");
+    TEST_ERROR(NFJSON_PARSE_MISS_KEY, "{\"a\":1,}");
+    TEST_ERROR(NFJSON_PARSE_MISS_KEY, "{\"a\":{ 1}");
+}
+
+static void test_parse_miss_colon() {
+    TEST_ERROR(NFJSON_PARSE_MISS_COLON, "{\"a\"}");
+    TEST_ERROR(NFJSON_PARSE_MISS_COLON, "{\"a\",\"b\"}");
+}
+
+static void test_parse_miss_comma_or_curly_bracket() {
+    TEST_ERROR(NFJSON_PARSE_MISS_COMMA_OR_CURLY_BRACKET, "{\"a\":1");
+    TEST_ERROR(NFJSON_PARSE_MISS_COMMA_OR_CURLY_BRACKET, "{\"a\":1]");
+    TEST_ERROR(NFJSON_PARSE_MISS_COMMA_OR_CURLY_BRACKET, "{  \"a\":1 \"b\" ");
+    TEST_ERROR(NFJSON_PARSE_MISS_COMMA_OR_CURLY_BRACKET, "{\"a \" :   1 \"b\"");
+    TEST_ERROR(NFJSON_PARSE_MISS_COMMA_OR_CURLY_BRACKET, "{\"a\":{}");
+    TEST_ERROR(NFJSON_PARSE_MISS_COMMA_OR_CURLY_BRACKET, "{\"a\":{ }");
+    TEST_ERROR(NFJSON_PARSE_MISS_COMMA_OR_CURLY_BRACKET, 
+                                                                                                                        " { "
+                                                                                                                        "\"n\" : null , "
+                                                                                                                        "\"f\" : false , "
+                                                                                                                        "\"t\" : true , "
+                                                                                                                        "\"i\" : 123 , "
+                                                                                                                        "\"s\" : \"abc\", "
+                                                                                                                        "\"a\" : [ 1, 2, 3 ],"
+                                                                                                                        "\"o\" : { \"1\" : 1, \"2\" : 2, \"3\" : 3 }"
+                                                                                                                        );
+}
+
+static void test_parse_object() {
+    nfjson_value v;
+    nfjson_init(&v);
+    EXPECT_EQ_INT(NFJSON_PARSE_OK, nfjson_parse(&v, " { } "));
+    EXPECT_EQ_INT(JSON_OBJECT, nfjson_get_type(&v));
+    EXPECT_EQ_SIZE_T(0, nfjson_get_object_size(&v));
+    nfjson_free(&v);
+    EXPECT_EQ_INT(NFJSON_PARSE_OK, nfjson_parse(&v, " {} "));
+    EXPECT_EQ_INT(JSON_OBJECT, nfjson_get_type(&v));
+    EXPECT_EQ_SIZE_T(0, nfjson_get_object_size(&v));
+    nfjson_free(&v);
+
+    nfjson_init(&v);
+    EXPECT_EQ_INT(NFJSON_PARSE_OK, nfjson_parse(&v,
+        " { "
+        "\"n\" : null , "
+        "\"f\" : false , "
+        "\"t\" : true , "
+        "\"i\" : 123 , "
+        "\"s\" : \"abc\", "
+        "\"a\" : [ 1, 2, 3 ],"
+        "\"o\" : { \"1\" : 1, \"2\" : 2, \"3\" : 3 }"
+        " } "
+    ));
+    EXPECT_EQ_INT(JSON_OBJECT, nfjson_get_type(&v));
+    EXPECT_EQ_SIZE_T(7, nfjson_get_object_size(&v));
+    EXPECT_TRUE(nfjson_object_contains(&v, &(nfjson_string) { "n", 1 }));
+    EXPECT_FALSE(nfjson_object_contains(&v, &(nfjson_string) { "n\0", 2 }));
+    EXPECT_TRUE(nfjson_object_contains(&v, &(nfjson_string) { "n\0", 1 }));//concerned func hashcode in parse.c
+    EXPECT_FALSE(nfjson_object_contains(&v, &(nfjson_string) { "n2", 1 }));
+    EXPECT_EQ_INT(JSON_NULL, nfjson_get_type(nfjson_get_object_value(&v, &(nfjson_string) { "n", 1 })));
+    EXPECT_TRUE(nfjson_object_contains(&v, &(nfjson_string) { "f", 1 }));
+    EXPECT_EQ_INT(JSON_FALSE, nfjson_get_type(nfjson_get_object_value(&v, &(nfjson_string) { "f", 1 })));
+    EXPECT_TRUE(nfjson_object_contains(&v, &(nfjson_string) { "t", 1 }));
+    EXPECT_EQ_INT(JSON_TRUE, nfjson_get_type(nfjson_get_object_value(&v, &(nfjson_string) { "t", 1 })));
+    EXPECT_TRUE(nfjson_object_contains(&v, &(nfjson_string) { "i", 1 }));
+    EXPECT_EQ_INT(JSON_NUMBER, nfjson_get_type(nfjson_get_object_value(&v, &(nfjson_string) { "i", 1 })));
+    EXPECT_EQ_DOUBLE(123, nfjson_get_number(nfjson_get_object_value(&v, &(nfjson_string) { "i", 1 })));
+
+    EXPECT_TRUE(nfjson_object_contains(&v, &(nfjson_string) { "s", 1 }));
+    EXPECT_EQ_INT(JSON_STRING, nfjson_get_type(nfjson_get_object_value(&v, &(nfjson_string) { "s", 1 })));
+    EXPECT_EQ_STRING("abc", nfjson_get_string(nfjson_get_object_value(&v, &(nfjson_string) { "s", 1 })), 
+                                            nfjson_get_string_length(nfjson_get_object_value(&v, &(nfjson_string) { "s", 1 })));
+
+    EXPECT_TRUE(nfjson_object_contains(&v, &(nfjson_string) { "a", 1 }));
+    nfjson_value *value = nfjson_get_object_value(&v, &(nfjson_string) { "a", 1 });
+    EXPECT_EQ_INT(JSON_ARRAY, nfjson_get_type(value));
+    EXPECT_EQ_SIZE_T(3, nfjson_get_array_size(value));
+    int i;
+    for (i = 0; i < 3; i++) {
+        nfjson_value* e = nfjson_get_array_element(value, i);
+        EXPECT_EQ_INT(JSON_NUMBER, nfjson_get_type(e));
+        EXPECT_EQ_DOUBLE(i + 1.0, nfjson_get_number(e));
+    }
+    EXPECT_TRUE(nfjson_object_contains(&v, &(nfjson_string) { "o", 1 }));
+    {
+        nfjson_value* o = nfjson_get_object_value(&v, &(nfjson_string) { "o", 1 });
+        EXPECT_EQ_SIZE_T(3, nfjson_get_object_size(o));
+        EXPECT_EQ_INT(JSON_OBJECT, nfjson_get_type(o));
+        char s[5] = { 0 };
+        for (i = (int)nfjson_get_object_size(o); i ; i--) {
+            //one line ambiguous
+            nfjson_value* ov = nfjson_get_object_value(o, &(nfjson_string) { (sprintf(s, "%d", i), s) , (int)strlen(s) });
+            EXPECT_TRUE(ov);
+            EXPECT_EQ_INT(JSON_NUMBER, nfjson_get_type(ov));
+            EXPECT_EQ_DOUBLE(i + 1.0, nfjson_get_number(ov));
+        }
+    }
+    nfjson_free(&v);
 }
 
 static void test_parse() {
@@ -408,10 +547,16 @@ static void test_parse() {
     test_parse_invalid_unicode_hex();
     test_parse_invalid_unicode_surrogate();
     test_parse_array();
-    #if 1
+    test_parse_array_extra_comma();
+    test_parse_miss_comma_or_square_bracket();
+    #if 0
     test_hash_table_char_key();
     test_hash_table_nfjson_string_key();
     #endif
+    test_parse_miss_key();
+    test_parse_miss_colon();
+    test_parse_miss_comma_or_curly_bracket();
+    test_parse_object();
 }
 
 int main() {

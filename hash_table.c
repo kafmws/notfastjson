@@ -10,18 +10,22 @@ static unsigned int hashcode(char *key) {
     return hash;
 }
 
+static int strcmp_default(const void *k, const void *key) {
+    return !strcmp(k, key);
+}
+
 hash_table *new_hash_table(int init_capacity, unsigned int(*hash_func)(void *key),
     int(*cmp_func)(const void *k, const void *key), void(*free_key)(void *ptr), void(*free_value)(void *ptr)){
     float f = (float)(init_capacity - 1);
     init_capacity = 1 << ((*(unsigned int*)(&f) >> 23) - 126);
-    if (init_capacity < 16) init_capacity = 16;
+    if (init_capacity < 8) init_capacity = 8;
     hash_table *ht = (hash_table *)malloc(sizeof(hash_table));
     ht->table = (kv **)malloc(sizeof(kv *)*init_capacity);
     memset(ht->table, 0, sizeof(kv *)*init_capacity);
     ht->cnt = 0;
     ht->table_size = init_capacity;
     ht->hash_func = hash_func ? hash_func : hashcode;
-    ht->cmp_func = cmp_func ? cmp_func : strcmp;
+    ht->cmp_func = cmp_func ? cmp_func : strcmp_default;
     ht->free_key = free_key ? free_key : free;
     ht->free_value = free_value ? free_value : free;
     return ht;
@@ -70,7 +74,7 @@ void *hash_table_put(hash_table *ht, void *key, void *val) {//return oldval when
     int h = hash & (ht->table_size - 1);
     kv *kv_list = ht->table[h];
     while (kv_list) {
-        if (hash == kv_list->hash && ht->cmp_func(key, kv_list->key) == 0) {
+        if (hash == kv_list->hash && ht->cmp_func(key, kv_list->key)) {
             void *old = kv_list->val;
             kv_list->val = val;
             return old;
@@ -92,7 +96,7 @@ void *hash_table_get(hash_table *ht, void *key) {
     int h = hash & (ht->table_size - 1);
     kv *kv_list = ht->table[h];
     while (kv_list) {
-        if (hash == kv_list->hash && ht->cmp_func(kv_list->key, key) == 0)return kv_list->val;
+        if (hash == kv_list->hash && ht->cmp_func(key, kv_list->key))return kv_list->val;
         else kv_list = kv_list->next;
     }
     return NULL;
@@ -104,9 +108,9 @@ void *hash_table_remove(hash_table *ht, void *key) {// free key in kv
     kv *kv_list = ht->table[h];
     if (kv_list) {
         kv *obj = NULL;
-        if (hash == kv_list->hash && ht->cmp_func(key, kv_list->key) == 0) { obj = kv_list; ht->table[h] = kv_list->next; }
+        if (hash == kv_list->hash && ht->cmp_func(key, kv_list->key)) { obj = kv_list; ht->table[h] = kv_list->next; }
         else while (kv_list->next) {
-            if (hash == kv_list->next->hash && ht->cmp_func(key, kv_list->next->key) == 0) {
+            if (hash == kv_list->next->hash && ht->cmp_func(key, kv_list->next->key)) {
                 obj = kv_list->next;
                 kv_list->next = obj->next;
                 break;

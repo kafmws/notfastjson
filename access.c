@@ -67,3 +67,18 @@ nfjson_value *nfjson_get_array_element(const nfjson_value *val, size_t index) {
     if (index < val->u.a.len) return val->u.a.e + index;
     return NULL;
 }
+
+size_t nfjson_get_object_size(nfjson_value *val) {
+    assert(val && val->type == JSON_OBJECT);
+    return val->u.hto->cnt;
+}
+
+int nfjson_object_contains(nfjson_value *val, nfjson_string *key) {
+    assert(val && val->type == JSON_OBJECT);
+    return hash_table_get(val->u.hto, (void *)key) != NULL;
+}
+
+nfjson_value *nfjson_get_object_value(nfjson_value *val, nfjson_string *key) {
+    assert(val && val->type == JSON_OBJECT);
+    return hash_table_get(val->u.hto, (void *)key);
+}

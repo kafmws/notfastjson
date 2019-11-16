@@ -230,6 +230,7 @@ static int nfjson_encode_unicode_codepoint(nfjson_context *c, unsigned int cp) {
 **/
 static int nfjson_parse_string_raw(nfjson_context *c, char **s, size_t *len) {
     *s = NULL;
+    *len = 0;
     size_t begin = c->top;
     int ch, parse_status;
     unsigned int u;
@@ -239,7 +240,7 @@ static int nfjson_parse_string_raw(nfjson_context *c, char **s, size_t *len) {
         case '"':
             *len = c->top - begin;
             c->json = str;
-            *s = (const char *)nfjson_context_pop(c, *len);
+            *s = nfjson_context_pop(c, *len);
             return NFJSON_PARSE_OK;
         case '\\':
             switch (ch = *str++) {
@@ -283,52 +284,85 @@ static int nfjson_parse_array(nfjson_context *c, nfjson_value *val) {
     c->json++;
     nfjson_parse_whitespace(c);
     size_t len = 0;
+    int parse_status = NFJSON_PARSE_OK;
+    if (*c->json == ',') { parse_status = NFJSON_PARSE_EXPECT_VALUE; c->json++; }
     while (*c->json != ']') {
         nfjson_value *v = (nfjson_value *)malloc(sizeof(nfjson_value));
         memset(v, 0, sizeof(nfjson_value));
-        int parse_status = nfjson_parse_value(c, v);
+        parse_status = nfjson_parse_value(c, v);
         if (parse_status == NFJSON_PARSE_OK) {
             *(uintptr_t *)nfjson_context_push(c, sizeof(uintptr_t)) = (uintptr_t)v;
             len++;
         }
-        else {
-            if(len) for (; len > 0; len--) free((nfjson_value *)(*(uintptr_t *)nfjson_context_pop(c, sizeof(uintptr_t))));
-            else free(v);
-            return parse_status; 
-        }
+        else { free(v); break; }
         nfjson_parse_whitespace(c);
         if (*c->json == ',') {
             c->json++;
             nfjson_parse_whitespace(c);
-            if (*c->json == ']') { return NFJSON_EXTRA_COMMA; }
+            if (*c->json == ']') { parse_status = NFJSON_EXTRA_COMMA; break; }
+        }
+        else if (*c->json != ']' || *c->json == '\0') {//value value
+            parse_status = NFJSON_PARSE_MISS_COMMA_OR_SQUARE_BRACKET; break;
         }
     }
-    c->json++;
-    val->u.a.len = len;
-    /*nfjson_value *array[] = malloc(sizeof(nfjson_value *)*len);*/ //expect continuous memory
-    if (len) {
-        nfjson_value *array = malloc(sizeof(nfjson_value)*len);
-        memset(array, 0, sizeof(nfjson_value)*len);
-        for (; len; len--) {
-            //expect continuous memory
-            /* *(array + len - 1) = (nfjson_value *)nfjson_context_pop(c, sizeof(uintptr_t)); */
-            nfjson_value *vp = (nfjson_value *)(*(uintptr_t *)nfjson_context_pop(c, sizeof(uintptr_t)));
-            *(array + len - 1) = *vp;
-            free(vp);
+    if (parse_status != NFJSON_PARSE_OK) {
+        if (len) for (; len > 0; len--) {
+            nfjson_value *nonuse = ((nfjson_value *)(*(uintptr_t *)nfjson_context_pop(c, sizeof(uintptr_t))));
+            nfjson_free(nonuse);
+            free(nonuse);
         }
-        val->u.a.e = array;
+    }else{
+        c->json++;
+        val->u.a.len = len;
+        /*nfjson_value *array[] = malloc(sizeof(nfjson_value *)*len);*/ //expect continuous memory
+        if (len) {
+            nfjson_value *array = malloc(sizeof(nfjson_value)*len);
+            memset(array, 0, sizeof(nfjson_value)*len);
+            for (; len; len--) {
+                //expect continuous memory
+                /* *(array + len - 1) = (nfjson_value *)nfjson_context_pop(c, sizeof(uintptr_t)); */
+                nfjson_value *vp = (nfjson_value *)(*(uintptr_t *)nfjson_context_pop(c, sizeof(uintptr_t)));
+                *(array + len - 1) = *vp;
+                free(vp);
+            }
+            val->u.a.e = array;
+        }
+        else val->u.a.e = NULL;
+        val->type = JSON_ARRAY;
     }
-    else val->u.a.e = NULL;
-    val->type = JSON_ARRAY;
-    return NFJSON_PARSE_OK;
+    return parse_status;
 }
 
-int nfjson_parse_nfjson_string(nfjson_context *c, nfjson_string *s) {
-    char *str = NULL;
-    size_t len = 0;
-    int parse_status = nfjson_parse_string_raw(c, &str, &len);
-    s->s = str;
-    s->len = len;
+static unsigned int nfjson_string_hashcode(nfjson_string *key) {//this func can not tell {"n\0", 1} & {"n\0", 2}, however, {"n\0", 1} may considered illegal
+    unsigned int hash = 0;
+    int i;
+    char *s = key->s;
+    for (i = (int)key->len; i >= 0; i--) {
+        hash = hash * 33 + s[i];
+    }
+    return hash;
+}
+
+//look up key "abc\0abc" matches "abc\0", cmp thr len
+static int cmp_nfjson_string_key(const nfjson_string *k, const nfjson_string *key) {
+    return k->len == key->len && memcmp(k->s, key->s, k->len) == 0;
+}
+
+static void nfjson_value_free(nfjson_value *val) {
+    nfjson_free(val);
+    free(val);
+}
+
+static int nfjson_parse_nfjson_string(nfjson_context *c, nfjson_string *str) {
+    str->s = NULL;
+    str->len = 0;
+    char *s;
+    int parse_status;
+    if ((parse_status = nfjson_parse_string_raw(c, &s, &str->len)) == NFJSON_PARSE_OK) {
+        str->s = malloc(sizeof(char)*(str->len + 1));
+        memcpy(str->s, s, str->len);
+        str->s[str->len] = 0;
+    }
     return parse_status;
 }
 
@@ -339,10 +373,43 @@ int nfjson_parse_nfjson_string(nfjson_context *c, nfjson_string *s) {
 static int nfjson_parse_object(nfjson_context *c, nfjson_value *val) {
     c->json++;
     nfjson_parse_whitespace(c);
-    char *key;
-    nfjson_value value;
-    /*int parse_status = nfjson_parse_string_raw(c, &s, );*/
-    /*char *key = malloc(sizeof(char)*)*/
+    int parse_status = NFJSON_PARSE_OK;// {}
+    char *s = NULL;
+    nfjson_string *key;
+    nfjson_value *value;
+    void *old_val = NULL;
+    hash_table *ht = new_hash_table(8, nfjson_string_hashcode, 
+                                                            cmp_nfjson_string_key, nfjson_string_free, nfjson_value_free);
+    while (*c->json != '}' && *c->json != '\0') {
+        if (*c->json != '"') { parse_status = NFJSON_PARSE_MISS_KEY; break; }
+        key = malloc(sizeof(nfjson_string));
+        parse_status = nfjson_parse_nfjson_string(c, key);
+        if (parse_status != NFJSON_PARSE_OK) { nfjson_string_free(key); parse_status = NFJSON_PARSE_MISS_KEY; break; }
+        nfjson_parse_whitespace(c);
+        if (*c->json++ != ':') {
+            parse_status = NFJSON_PARSE_MISS_COLON; nfjson_string_free(key); break;
+        }
+        nfjson_parse_whitespace(c);
+        value = malloc(sizeof(nfjson_value));
+        parse_status = nfjson_parse_value(c, value);
+        if (parse_status != NFJSON_PARSE_OK) { nfjson_string_free(key); nfjson_free(value); free(value); break; }
+        if (old_val = hash_table_put(ht, key, value)) { nfjson_free(old_val); free(old_val); }//repeated key
+        nfjson_parse_whitespace(c);
+        if (*c->json == '}') { c->json++; break; }
+        else if (*c->json == ',') {
+            c->json++;
+            nfjson_parse_whitespace(c);
+            if (*c->json == '}' || *c->json == '\0') { parse_status = NFJSON_PARSE_MISS_KEY; break; }
+        } else { parse_status = NFJSON_PARSE_MISS_COMMA_OR_CURLY_BRACKET; break; }
+    }
+    if (*c->json == '}') c->json++;
+    if (parse_status != NFJSON_PARSE_OK) {
+        hash_table_free(ht);
+    } else {
+        val->u.hto = ht;
+        val->type = JSON_OBJECT;
+    }
+    return parse_status;
 }
 
 /* value = null / false / true / number */

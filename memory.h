@@ -5,4 +5,4 @@ void nfjson_init(nfjson_value * val);
 
 void nfjson_free(nfjson_value * val);
 
-void nfjson_free_nfjson_string(nfjson_string * str);
+void nfjson_string_free(nfjson_string * str);

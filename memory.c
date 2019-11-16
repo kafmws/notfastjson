@@ -13,15 +13,17 @@ void nfjson_free(nfjson_value *val) {
     case JSON_UNRESOLVED:
         return;
     case JSON_STRING:
-        free(val->u.s.s); val->u.s.s = NULL; break;
+        if(val->u.s.s)free(val->u.s.s); break;
     case JSON_ARRAY:
     {
         int len = (int)val->u.a.len - 1;
         for (; len >= 0; len--) {
             nfjson_free(val->u.a.e + len);
         }
-        if (val->u.a.e)free(val->u.a.e); 
-    }
+        if (val->u.a.e) { free(val->u.a.e); }
+    }; break;
+    case JSON_OBJECT:
+        if (val->u.hto) { hash_table_free(val->u.hto); }break;
     default:
         break;
     }
@@ -29,8 +31,8 @@ void nfjson_free(nfjson_value *val) {
     val->type = JSON_UNRESOLVED;
 }
 
-void nfjson_free_nfjson_string(nfjson_string *str) {
+void nfjson_string_free(nfjson_string *str) {
     assert(str);
-    free(str->s);
+    if (str->s) { free(str->s); str->s = NULL; }
     free(str);
 }
