@@ -32,6 +32,7 @@
 |bool|JSON_TRUE / JSON_FALSE|
 |number|JSON_NUMBER|
 |string|JSON_STRING|
+|array|JSON_ARRAY|
 |object|JSON_OBJECT|
 
 ### 数据结构
@@ -66,7 +67,7 @@ typedef struct {
 |hash_table|通用hash表，<br>内置使用以nfjson_string为key类型，<br>nfjson_value为value类型使用|
 |nfjson_context 中 stack|任意类型动态堆栈，<br>用作string，array类型解析缓冲区|
 
-### 文件结构
+### 文件目录
 ```
 |-- access.c .h				//getter & setter
 |-- hash_table.c .h			//hash_table
@@ -155,6 +156,7 @@ build simple unit testing.
 |bool|JSON_TRUE / JSON_FALSE|
 |number|JSON_NUMBER|
 |string|JSON_STRING|
+|array|JSON_ARRAY
 |object|JSON_OBJECT|
 
 ### Data Structure
@@ -189,7 +191,7 @@ typedef struct {
 |hash_table|a hash table,<br>using nfjson_string as key<br>and nfjson_value as value|
 |stack in nfjson_context|dynamic stack for any type,<br>as a buffer for json string type<br>and json array type in parsing|
 
-### file structure
+### file index
 ```
 |-- access.c .h				//getter & setter
 |-- hash_table.c .h			//hash_table
