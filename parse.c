@@ -161,7 +161,7 @@ static char *nfjson_unicode_char2dec(const char *str, unsigned int *val) {
 }
 
 /* codepoint = 0x10000 + (H - 0xD800) × 0x400 + (L - 0xDC00) */
-static int nfjson_parse_unicode_char(char const **str, unsigned int *val) {
+static int nfjson_parse_unicode_char(char **str, unsigned int *val) {
     unsigned int H = 0, L = 0;
     char *p = *str;
     p = nfjson_unicode_char2dec(p, &H);
@@ -253,7 +253,7 @@ static int nfjson_parse_string_raw(nfjson_context *c, char **s, size_t *len) {
             case 'r':PUSHC(c, '\r'); break;
             case 't':PUSHC(c, '\t'); break;
             case 'u':
-                parse_status = nfjson_parse_unicode_char(&str, &u);
+                parse_status = nfjson_parse_unicode_char((char **)&str, &u);
                 if (parse_status == NFJSON_PARSE_OK) nfjson_encode_unicode_codepoint(c, u);
                 else { c->top = begin; return parse_status; }
                 break;
@@ -288,7 +288,7 @@ static int nfjson_parse_array(nfjson_context *c, nfjson_value *val) {
     if (*c->json == ',') { parse_status = NFJSON_PARSE_EXPECT_VALUE; c->json++; }
     while (*c->json != ']') {
         nfjson_value *v = (nfjson_value *)malloc(sizeof(nfjson_value));
-        memset(v, 0, sizeof(nfjson_value));
+        nfjson_init(v);
         parse_status = nfjson_parse_value(c, v);
         if (parse_status == NFJSON_PARSE_OK) {
             *(uintptr_t *)nfjson_context_push(c, sizeof(uintptr_t)) = (uintptr_t)v;
@@ -391,6 +391,7 @@ static int nfjson_parse_object(nfjson_context *c, nfjson_value *val) {
         }
         nfjson_parse_whitespace(c);
         value = malloc(sizeof(nfjson_value));
+        nfjson_init(value);
         parse_status = nfjson_parse_value(c, value);
         if (parse_status != NFJSON_PARSE_OK) { nfjson_string_free(key); nfjson_free(value); free(value); break; }
         if (old_val = hash_table_put(ht, key, value)) { nfjson_free(old_val); free(old_val); }//repeated key

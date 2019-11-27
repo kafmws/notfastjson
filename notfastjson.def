@@ -1,0 +1,20 @@
+LIBRARY notfastjson
+EXPORTS
+nfjson_parse									@1
+nfjson_get_type								@2
+nfjson_set_null								@3
+nfjson_get_boolean							@4
+nfjson_set_boolean							@5
+nfjson_get_number							@6
+nfjson_set_number							@7
+nfjson_get_string							@8
+nfjson_get_string_length				@9
+nfjson_set_string							@10
+nfjson_get_array_size					@11
+nfjson_get_array_element				@12
+nfjson_get_object_size					@13
+nfjson_object_contains					@14
+nfjson_get_object_value					@15
+nfjson_init										@16
+nfjson_free										@17
+nfjson_string_free							@18
