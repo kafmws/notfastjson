@@ -23,7 +23,7 @@ void nfjson_free(nfjson_value *val) {
         if (val->u.a.e) { free(val->u.a.e); }
     }; break;
     case JSON_OBJECT:
-        if (val->u.hto) { hash_table_free(val->u.hto); }break;
+        if (val->u.ht) { hash_table_free(val->u.ht); }break;
     default:
         break;
     }

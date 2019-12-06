@@ -161,9 +161,9 @@ static char *nfjson_unicode_char2dec(const char *str, unsigned int *val) {
 }
 
 /* codepoint = 0x10000 + (H - 0xD800) × 0x400 + (L - 0xDC00) */
-static int nfjson_parse_unicode_char(char **str, unsigned int *val) {
+static int nfjson_parse_unicode_char(const char **str, unsigned int *val) {
     unsigned int H = 0, L = 0;
-    char *p = *str;
+    const char *p = *str; 
     p = nfjson_unicode_char2dec(p, &H);
     if (!p) return NFJSON_PARSE_INVALID_UNICODE_HEX;
     if (0xD800 <= H && H <= 0xDBFF) {
@@ -215,15 +215,15 @@ static int nfjson_encode_unicode_codepoint(nfjson_context *c, unsigned int cp) {
 *   string = quotation-mark *char quotation-mark
 *   char = unescaped /
 *   escape (
-*       %x22 /          ; "    quotation mark  U+0022
-*       %x5C /          ; \    reverse solidus U+005C
-*       %x2F /          ; /    solidus         U+002F
-*       %x62 /          ; b    backspace       U+0008
-*       %x66 /          ; f    form feed       U+000C
-*       %x6E /          ; n    line feed       U+000A
-*       %x72 /          ; r    carriage return U+000D
-*       %x74 /          ; t    tab             U+0009
-*       %x75 4HEXDIG )  ; uXXXX                U+XXXX
+*       %x22 /          ; "    quotation mark           U+0022
+*       %x5C /          ; \    reverse solidus          U+005C
+*       %x2F /          ; /    solidus                      U+002F
+*       %x62 /          ; b    backspace                U+0008
+*       %x66 /          ; f    form feed                U+000C
+*       %x6E /          ; n    line feed                    U+000A
+*       %x72 /          ; r    carriage return          U+000D
+*       %x74 /          ; t    tab                          U+0009
+*       %x75 4HEXDIG )  ; uXXXX                 U+XXXX
 *   escape = %x5C          ; \
 *   quotation-mark = %x22  ; "
 *   unescaped = %x20-21 / %x23-5B / %x5D-10FFFF
@@ -253,7 +253,7 @@ static int nfjson_parse_string_raw(nfjson_context *c, char **s, size_t *len) {
             case 'r':PUSHC(c, '\r'); break;
             case 't':PUSHC(c, '\t'); break;
             case 'u':
-                parse_status = nfjson_parse_unicode_char((char **)&str, &u);
+                parse_status = nfjson_parse_unicode_char(&str, &u);
                 if (parse_status == NFJSON_PARSE_OK) nfjson_encode_unicode_codepoint(c, u);
                 else { c->top = begin; return parse_status; }
                 break;
@@ -396,7 +396,7 @@ static int nfjson_parse_object(nfjson_context *c, nfjson_value *val) {
         if (parse_status != NFJSON_PARSE_OK) { nfjson_string_free(key); nfjson_free(value); free(value); break; }
         if (old_val = hash_table_put(ht, key, value)) { nfjson_free(old_val); free(old_val); }//repeated key
         nfjson_parse_whitespace(c);
-        if (*c->json == '}') { c->json++; break; }
+        if (*c->json == '}') { break; }
         else if (*c->json == ',') {
             c->json++;
             nfjson_parse_whitespace(c);
@@ -407,7 +407,7 @@ static int nfjson_parse_object(nfjson_context *c, nfjson_value *val) {
     if (parse_status != NFJSON_PARSE_OK) {
         hash_table_free(ht);
     } else {
-        val->u.hto = ht;
+        val->u.ht = ht;
         val->type = JSON_OBJECT;
     }
     return parse_status;
@@ -447,4 +447,98 @@ int nfjson_parse(nfjson_value *val, const char *json) {
     assert(context.top == 0);
     free(context.stack);
     return parse_status;
+}
+
+#define PUSHS(c,str,len) do { memcpy(nfjson_context_push(c, len), str, len); }while(0)
+static nfjson_stringify_string(nfjson_context *c, nfjson_string *str) {
+    PUSHC(c, '"');
+    //memcpy(nfjson_context_push(c, val->u.s.len), val->u.s.s, val->u.s.len);//'\0' -> "\u0000"
+    char *s = str->s;
+    size_t i = 0, len = str->len;
+    for (; i < len; i++)
+        if (s[i]) {
+            switch (s[i]) {
+            case '\"': PUSHS(c, "\\\"", 2); break;
+            case '\\': PUSHS(c, "\\\\", 2); break;
+            case '\b': PUSHS(c, "\\b", 2); break;
+            case '\f': PUSHS(c, "\\f", 2); break;
+            case '\n': PUSHS(c, "\\n", 2); break;
+            case '\r': PUSHS(c, "\\r", 2); break;
+            case '\t': PUSHS(c, "\\t", 2); break;
+            //case '\/': PUSHC(c, '\"'); break;
+            default:
+                if (s[i] < 0x20) sprintf((char *)nfjson_context_push(c, 6), "\\u00%02X", s[i]);
+                else PUSHC(c, s[i]);
+            }
+        }
+        else memcpy(nfjson_context_push(c, 6), "\\u0000", 6);
+    PUSHC(c, '"');
+}
+
+static int nfjson_stringify_value(nfjson_context *c, nfjson_value *val) {
+    switch (val->type) {
+    case JSON_NULL: PUSHS(c, "null", 4); break;
+    case JSON_FALSE: PUSHS(c, "false", 5); break;
+    case JSON_TRUE: PUSHS(c, "true", 4); break;
+    case JSON_NUMBER: c->top -= 32 - sprintf((char *)nfjson_context_push(c, 32), "%.17g", val->u.n); break;//precison doubut
+    case JSON_STRING: nfjson_stringify_string(c, &(val->u.s)); break;
+    case JSON_ARRAY: 
+    {
+        PUSHC(c, '[');
+        int len = (int)val->u.a.len - 1, i = 0;
+        nfjson_value *array = val->u.a.e;
+        for (; i < len; i++) {
+            nfjson_stringify_value(c, array + i);
+            PUSHC(c, ',');
+        }
+        if(array)nfjson_stringify_value(c, array + i);
+        PUSHC(c, ']');
+    }
+    break;
+    case JSON_OBJECT: 
+    {
+        PUSHC(c, '{');
+        size_t size = (size_t)val->u.ht->cnt, i = 0, cnt = 0;
+        kv **table = val->u.ht->table;
+        kv* kv_list = NULL;
+        while (cnt < size) {
+            if (kv_list = table[i]) {
+                while (kv_list) {
+                    nfjson_stringify_string(c, (nfjson_string *)kv_list->key);
+                    PUSHC(c, ':');
+                    nfjson_stringify_value(c, (nfjson_value *)kv_list->val);
+                    kv_list = kv_list->next;
+                    PUSHC(c, ',');
+                    cnt++;
+                }
+            }
+            i++;
+        }
+        if(size) c->top--;//pop the last ','
+        PUSHC(c, '}');
+    }
+    break;
+    case JSON_UNRESOLVED: return NFJSON_STRINGIFY_UNRESOLVED_TYPE;
+    default:return NFJSON_STRINGIFY_INVALID_TYPE;
+    }
+    return NFJSON_STRINGIFY_OK;
+}
+
+char *nfjson_stringify(nfjson_value *val, size_t *_len, int *_status) {
+    nfjson_context *c = malloc(sizeof(nfjson_context));
+    memset(c, 0, sizeof(nfjson_context));
+    char *json = NULL;
+    int status;
+    if ((status = nfjson_stringify_value(c, val)) == NFJSON_STRINGIFY_OK) {
+        size_t len = c->top;
+        if (_len) *_len = len;
+        json = malloc(sizeof(char)*(len + 1));
+        memcpy(json, nfjson_context_pop(c, len), len);
+        json[len] = 0;
+    }
+    if (_status) *_status = status;
+    assert(c->top == 0);
+    free(c->stack);
+    free(c);
+    return json;
 }

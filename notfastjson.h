@@ -23,6 +23,9 @@ enum {
     NFJSON_PARSE_MISS_KEY,
     NFJSON_PARSE_MISS_COLON,
     NFJSON_PARSE_MISS_COMMA_OR_CURLY_BRACKET,
+    NFJSON_STRINGIFY_OK,
+    NFJSON_STRINGIFY_UNRESOLVED_TYPE,
+    NFJSON_STRINGIFY_INVALID_TYPE,
 };
 
 typedef struct nfjson_value nfjson_value;
@@ -33,7 +36,7 @@ struct nfjson_value {
     union {
         nfjson_string s;/* type == JSON_STRING */
         struct { nfjson_value *e; size_t len; }a;/* type == JSON_ARRAY */
-        hash_table *hto;/* type == JSON_OBJECT */
+        hash_table *ht;/* type == JSON_OBJECT */
         double n;/* type == JSON_NUMBER */
     }u;
     nfjson_type type;

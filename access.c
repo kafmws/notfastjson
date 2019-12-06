@@ -70,15 +70,34 @@ nfjson_value *nfjson_get_array_element(const nfjson_value *val, size_t index) {
 
 size_t nfjson_get_object_size(nfjson_value *val) {
     assert(val && val->type == JSON_OBJECT);
-    return val->u.hto->cnt;
+    return val->u.ht->cnt;
 }
 
 int nfjson_object_contains(nfjson_value *val, nfjson_string *key) {
     assert(val && val->type == JSON_OBJECT);
-    return hash_table_get(val->u.hto, (void *)key) != NULL;
+    return hash_table_get(val->u.ht, (void *)key) != NULL;
+}
+
+size_t nfjson_get_object_key(nfjson_value *val, const nfjson_string **_keys) {
+    assert(val->type == JSON_OBJECT);
+    nfjson_string **keys = (nfjson_string **)_keys;
+    size_t size = (size_t)val->u.ht->cnt, i = 0, cnt = 0;
+    kv **table = val->u.ht->table;
+    kv* kv_list = NULL;
+    while (cnt < size) {
+        if (kv_list = table[i]) {
+            while (kv_list) {
+                keys[cnt++] = (nfjson_string *)kv_list->key;
+                kv_list = kv_list->next;
+                cnt++;
+            }
+        }
+        i++;
+    }
+    return cnt;
 }
 
 nfjson_value *nfjson_get_object_value(nfjson_value *val, nfjson_string *key) {
     assert(val && val->type == JSON_OBJECT);
-    return hash_table_get(val->u.hto, (void *)key);
+    return hash_table_get(val->u.ht, (void *)key);
 }
