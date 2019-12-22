@@ -89,7 +89,6 @@ size_t nfjson_get_object_key(nfjson_value *val, const nfjson_string **_keys) {
             while (kv_list) {
                 keys[cnt++] = (nfjson_string *)kv_list->key;
                 kv_list = kv_list->next;
-                cnt++;
             }
         }
         i++;
