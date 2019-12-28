@@ -78,7 +78,7 @@ int nfjson_object_contains(nfjson_value *val, nfjson_string *key) {
     return hash_table_get(val->u.ht, (void *)key) != NULL;
 }
 
-size_t nfjson_get_object_key(nfjson_value *val,nfjson_string *_keys[]) {
+size_t nfjson_get_object_key(nfjson_value *val, const nfjson_string **_keys) {
     assert(val->type == JSON_OBJECT);
     nfjson_string **keys = (nfjson_string **)_keys;
     size_t size = (size_t)val->u.ht->cnt, i = 0, cnt = 0;
