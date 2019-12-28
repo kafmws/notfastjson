@@ -1,8 +1,9 @@
-﻿#include "pch.h"
+﻿#define _CRT_SECURE_NO_WARNINGS
+#include "pch.h"
 #include "notfastjson.h"
-#include"parse.h"
-#include"access.h"
-#include"memory.h"
+#include "parse.h"
+#include "access.h"
+#include "memory.h"
 
 #ifndef NFJSON_PARSE_STACK_INIT_SIZE
 #define NFJSON_PARSE_STACK_INIT_SIZE 256

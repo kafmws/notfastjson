@@ -14,6 +14,8 @@ static int strcmp_default(const void *k, const void *key) {
     return !strcmp(k, key);
 }
 
+void fake_free(void *p) { free(p); }
+
 hash_table *new_hash_table(int init_capacity, unsigned int(*hash_func)(void *key),
     int(*cmp_func)(const void *k, const void *key), void(*free_key)(void *ptr), void(*free_value)(void *ptr)){
     float f = (float)(init_capacity - 1);
@@ -26,8 +28,8 @@ hash_table *new_hash_table(int init_capacity, unsigned int(*hash_func)(void *key
     ht->table_size = init_capacity;
     ht->hash_func = hash_func ? hash_func : hashcode;
     ht->cmp_func = cmp_func ? cmp_func : strcmp_default;
-    ht->free_key = free_key ? free_key : free;
-    ht->free_value = free_value ? free_value : free;
+    ht->free_key = free_key ? free_key : fake_free;
+    ht->free_value = free_value ? free_value : fake_free;
     return ht;
 }
 
