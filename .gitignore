@@ -19,3 +19,9 @@
 *.ipdb
 *.enc
 *.exp
+*.db-wal
+*.db-shm
+*.opendb
+*.json
+*.sqlite
+.vs/notfastjson/v16/.suo
