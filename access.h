@@ -28,5 +28,3 @@ size_t nfjson_get_object_size(nfjson_value * val);
 int nfjson_object_contains(nfjson_value * val, nfjson_string * key);
 
 nfjson_value * nfjson_get_object_value(nfjson_value * val, nfjson_string * key);
-
-size_t nfjson_get_object_key(nfjson_value *val, const nfjson_string **_keys);
